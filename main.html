@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>User Panel - Free Fire Tournament</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background:#222; color:#fff; margin:0; padding:0; }
+    header { background:#ff9f1c; padding:15px; display:flex; justify-content:space-between; align-items:center; }
+    header div { font-weight:bold; font-size:18px; }
+    main { padding: 10px; }
+    nav { display: flex; justify-content: space-around; background:#333; padding: 10px 0; position: fixed; bottom: 0; width: 100%; }
+    nav button { background:none; border:none; color:#fff; font-size:14px; cursor:pointer; }
+    nav button.active { font-weight: bold; color:#ff9f1c; }
+    .section { display:none; }
+    .section.active { display:block; }
+    .match-card { background:#444; margin:10px 0; padding:10px; border-radius:8px; }
+    .match-logo { width:50px; height:50px; object-fit:contain; margin-right:10px; }
+    .match-header { display:flex; align-items:center; }
+    .match-title { font-weight:bold; font-size:16px; }
+    .match-info { font-size:12px; margin-top:4px; }
+    button.join-btn { background:#ff9f1c; border:none; padding:8px 15px; border-radius:6px; cursor:pointer; color:#000; font-weight:bold; margin-top:8px; }
+    label { display:block; margin-top:10px; }
+    input, select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: none; }
+    .wallet-section, .history-section, .profile-section { margin-top: 10px; }
+    .history-item { background:#333; margin:8px 0; padding:8px; border-radius:6px; }
+    .profile-info p { margin:5px 0; }
+    .balance-display { font-weight:bold; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>Free Fire Tournament</div>
+    <div id="balanceDisplay">Balance: ৳0</div>
+    <button onclick="logout()" style="background:none; border:none; color:#fff; cursor:pointer;">Logout</button>
+  </header>
+  <main>
+    <section id="matchesSection" class="section active">
+      <h2>Matches</h2>
+      <div id="matchesList"></div>
+    </section>
+    <section id="walletSection" class="section">
+      <h2>Wallet</h2>
+      <label>Deposit Number: <span id="depositNumber">Loading...</span></label>
+      <label>Deposit Amount (৳)</label>
+      <input type="number" id="depositAmount" placeholder="Enter amount" />
+      <label>Method</label>
+      <select id="depositMethod">
+        <option value="bKash">bKash</option>
+        <option value="Nagad">Nagad</option>
+      </select>
+      <label>Transaction ID</label>
+      <input type="text" id="depositTxnId" placeholder="Transaction ID" />
+      <button onclick="submitDeposit()">Confirm Deposit</button>
+
+      <hr />
+
+      <label>Withdraw Amount (৳)</label>
+      <input type="number" id="withdrawAmount" placeholder="Enter amount" />
+      <label>Method</label>
+      <select id="withdrawMethod">
+        <option value="bKash">bKash</option>
+        <option value="Nagad">Nagad</option>
+      </select>
+      <label>Number</label>
+      <input type="text" id="withdrawNumber" placeholder="Number" />
+      <button onclick="submitWithdraw()">Confirm Withdraw</button>
+    </section>
+
+    <section id="historySection" class="section">
+      <h2>Transaction History</h2>
+      <div id="historyList">Loading...</div>
+    </section>
+
+    <section id="profileSection" class="section">
+      <h2>Profile</h2>
+      <div class="profile-info" id="profileInfo"></div>
+    </section>
+  </main>
+
+  <nav>
+    <button onclick="showSection('matchesSection')" class="active">Matches</button>
+    <button onclick="showSection('walletSection')">Wallet</button>
+    <button onclick="showSection('historySection')">History</button>
+    <button onclick="showSection('profileSection')">Profile</button>
+  </nav>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA4DKyv3GqCSO1WwXIWTL7a1doc7bhQMZY",
+    authDomain: "ff-tournament-c9dd2.firebaseapp.com",
+    databaseURL: "https://ff-tournament-c9dd2-default-rtdb.firebaseio.com",
+    projectId: "ff-tournament-c9dd2",
+    storageBucket: "ff-tournament-c9dd2.appspot.com",
+    messagingSenderId: "1055880025714",
+    appId: "1:1055880025714:web:b5438a3964c2b9a24d94eb"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  let currentUser = null;
+
+  auth.onAuthStateChanged(user => {
+    if(user){
+      currentUser = user;
+      loadBalance();
+      loadMatches();
+      loadDepositNumber();
+      loadHistory();
+      loadProfile();
+      showSection('matchesSection');
+    }else{
+      window.location.href = "login.html";
+    }
+  });
+
+  function logout(){
+    auth.signOut().then(() => {
+      window.location.href = "login.html";
+    });
+  }
+
+  function showSection(id){
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+  }
+
+  function loadBalance(){
+    db.ref(`users/${currentUser.uid}/balance`).on('value', snap => {
+      const bal = snap.val() || 0;
+      document.getElementById('balanceDisplay').textContent = `Balance: ৳${bal}`;
+    });
+  }
+
+  function loadMatches(){
+    db.ref('matches').on('value', snap => {
+      const matches = snap.val() || {};
+      const list = document.getElementById('matchesList');
+      list.innerHTML = '';
+      for(const key in matches){
+        const m = matches[key];
+        const joinedPlayersRef = db.ref(`matchParticipants/${key}`);
+        joinedPlayersRef.once('value').then(playersSnap => {
+          const joinedCount = playersSnap.numChildren();
+          const spotsLeft = m.joinLimit - joinedCount;
+          const card = document.createElement('div');
+          card.className = 'match-card';
+          card.innerHTML = `
+            <div class="match-header">
+              <img src="${m.logo}" alt="${m.title}" class="match-logo" />
+              <div>
+                <div class="match-title">${m.title}</div>
+                <div class="match-info">Entry Fee: ৳${m.joinAmount} | Max Players: ${m.joinLimit}</div>
+                <div class="match-info">Joined: ${joinedCount} | Spots Left: ${spotsLeft}</div>
+              </div>
+            </div>
+            <div class="match-desc">${m.description}</div>
+            <button onclick="joinMatch('${key}', ${m.joinAmount}, ${m.joinLimit})">Join Match</button>
+          `;
+          list.appendChild(card);
+        });
+      }
+    });
+  }
+
+  function joinMatch(matchKey, joinAmount, joinLimit){
+    const userRef = db.ref(`users/${currentUser.uid}`);
+    userRef.once('value').then(snap => {
+      const user = snap.val();
+      if(user.blocked){
+        alert("You are blocked by admin.");
+        return;
+      }
+      if((user.balance || 0) < joinAmount){
+        alert("Insufficient balance.");
+        return;
+      }
+      db.ref(`matchParticipants/${matchKey}/${currentUser.uid}`).once('value').then(joinSnap => {
+        if(joinSnap.exists()){
+          alert("You already joined this match.");
+          return;
+        }
+        db.ref(`matches/${matchKey}/joinedCount`).once('value').then(countSnap => {
+          const count = countSnap.val() || 0;
+          if(count >= joinLimit){
+            alert("Match is full.");
+            return;
+          }
+          const updates = {};
+          updates[`users/${currentUser.uid}/balance`] = user.balance - joinAmount;
+          updates[`matchParticipants/${matchKey}/${currentUser.uid}`] = { joinedAt: Date.now(), status: "pending" };
+          updates[`matches/${matchKey}/joinedCount`] = count + 1;
+
+          const newHistKey = db.ref("history").push().key;
+          updates[`history/${newHistKey}`] = {
+            userId: currentUser.uid,
+            matchKey,
+            amount: -joinAmount,
+            type: "join_match",
+            timestamp: Date.now()
+          };
+
+          db.ref().update(updates).then(() => {
+            alert("Successfully joined the match");
+          });
+        });
+      });
+    });
+  }
+
+  function loadDepositNumber(){
+    db.ref("settings/depositNumber").on("value", snap => {
+      const number = snap.val() || "N/A";
+      document.getElementById("depositNumber").textContent = number;
+    });
+  }
+
+  function submitDeposit(){
+    const amount = parseFloat(document.getElementById("depositAmount").value);
+    const method = document.getElementById("depositMethod").value;
+    const txnId = document.getElementById("depositTxnId").value.trim();
+
+    if(!amount || amount <= 0 || !txnId){
+      alert("Enter valid amount and transaction ID");
+      return;
+    }
+
+    const newKey = db.ref("depositRequests").push().key;
+    db.ref("depositRequests/" + newKey).set({
+      userId: currentUser.uid,
+      username: currentUser.email,
+      amount,
+      method,
+      txnId,
+      status: "pending",
+      timestamp: Date.now()
+    }).then(() => {
+      alert("Deposit request sent");
+      document.getElementById("depositAmount").value = "";
+      document.getElementById("depositTxnId").value = "";
+    });
+  }
+
+  function submitWithdraw(){
+    const amount = parseFloat(document.getElementById("withdrawAmount").value);
+    const method = document.getElementById("withdrawMethod").value;
+    const number = document.getElementById("withdrawNumber").value.trim();
+
+    if(!amount || amount <= 0 || !number){
+      alert("Enter valid amount and number");
+      return;
+    }
+
+    db.ref(`users/${currentUser.uid}`).once("value").then(snap => {
+      const user = snap.val();
+      if((user.balance || 0) < amount){
+        alert("Insufficient balance");
+        return;
+      }
+      const newKey = db.ref("withdrawRequests").push().key;
+      db.ref("withdrawRequests/" + newKey).set({
+        userId: currentUser.uid,
+        username: currentUser.email,
+        amount,
+        method,
+        number,
+        status: "pending",
+        timestamp: Date.now()
+      }).then(() => {
+        alert("Withdraw request sent");
+        // Immediately deduct balance (can be reverted if admin rejects)
+        db.ref(`users/${currentUser.uid}/balance`).set(user.balance - amount);
+        document.getElementById("withdrawAmount").value = "";
+        document.getElementById("withdrawNumber").value = "";
+      });
+    });
+  }
+
+  function loadHistory(){
+    db.ref("history").orderByChild("userId").equalTo(currentUser.uid).on("value", snap => {
+      const data = snap.val() || {};
+      const historyList = document.getElementById("historyList");
+      historyList.innerHTML = "";
+      Object.values(data).forEach(h => {
+        const div = document.createElement("div");
+        div.className = "history-item";
+        div.textContent = `${new Date(h.timestamp).toLocaleString()} - ${h.type} - ৳${h.amount}`;
+        historyList.appendChild(div);
+      });
+    });
+  }
+
+  function loadProfile(){
+    db.ref(`users/${currentUser.uid}`).on('value', snap => {
+      const user = snap.val() || {};
+      const profileDiv = document.getElementById('profileInfo');
+      profileDiv.innerHTML = `
+        <p>Email: ${currentUser.email}</p>
+        <p>Balance: ৳${user.balance || 0}</p>
+        <p>Status: ${user.blocked ? "Blocked" : "Active"}</p>
+      `;
+    });
+  }
+</script>
+</body>
+</html>
